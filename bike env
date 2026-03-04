@@ -1,0 +1,213 @@
+"""
+OpenAI Gymnasium environment wrapping the bicycle aerodynamics simulation.
+
+The environment exposes a single-step evaluation interface:
+    - Observation: the 15-dimensional frame parameter vector (continuous box)
+    - Action: a new 15-dimensional frame parameter vector to evaluate
+    - Reward: −penalised_power of the submitted design  (maximised reward = minimised power)
+    - Terminated: True after one evaluation step (episodic, no time horizon)
+
+This design decouples the physics/constraint model from the GA so that
+alternative optimisers (e.g. RL, CMA-ES) can also drive the environment.
+
+Usage from the GA:
+    env = BikeFrameEnv()
+    obs, info = env.reset()
+    obs, reward, terminated, truncated, info = env.step(frame_genome)
+    cda = info['cda']
+    is_legal = info['is_legal']
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import gymnasium as gym
+from gymnasium import spaces
+from typing import Any, Dict, Optional, Tuple
+
+from physics import (
+    PARAM_NAMES, PARAM_BOUNDS, N_PARAMS,
+    genome_to_dict, calculate_cda,
+    martin_power, compute_wheelbase,
+    RIDER_MASS, RHO_AIR,
+)
+from constraints import check_uci_compliance
+
+# Speed at which we evaluate aerodynamic fitness (45 km/h in m/s)
+EVAL_SPEED_MS = 45.0 / 3.6          # = 12.5 m/s
+FORK_LENGTH_MM = 370.0
+
+
+class BikeFrameEnv(gym.Env):
+    """
+    Gymnasium environment for bicycle frame aerodynamic optimisation.
+
+    Observation space:  Box(N_PARAMS,) — normalised [0, 1] frame parameters
+    Action space:       Box(N_PARAMS,) — normalised [0, 1] proposed design
+    Reward:             −penalised_power (W)  (higher = better)
+    """
+
+    metadata = {"render_modes": ["human"], "render_fps": 1}
+
+    def __init__(self, render_mode: Optional[str] = None):
+        super().__init__()
+        self.render_mode = render_mode
+
+        # Store raw bounds for de-normalisation
+        self._lows  = np.array([lo for lo, _ in PARAM_BOUNDS], dtype=np.float64)
+        self._highs = np.array([hi for _, hi in PARAM_BOUNDS], dtype=np.float64)
+        self._range = self._highs - self._lows
+
+        # Both spaces use the normalised [0, 1] representation
+        self.observation_space = spaces.Box(
+            low=0.0, high=1.0, shape=(N_PARAMS,), dtype=np.float64
+        )
+        self.action_space = spaces.Box(
+            low=0.0, high=1.0, shape=(N_PARAMS,), dtype=np.float64
+        )
+
+        # Internal state
+        self._current_params: Optional[Dict[str, float]] = None
+        self._current_cda:    Optional[float] = None
+        self._step_count: int = 0
+
+    # ── Coordinate transforms ────────────────────────────────────────────────
+
+    def normalise(self, genome: list) -> np.ndarray:
+        """Map raw parameter values → [0, 1] space."""
+        arr = np.asarray(genome, dtype=np.float64)
+        return (arr - self._lows) / self._range
+
+    def denormalise(self, norm_action: np.ndarray) -> list:
+        """Map [0, 1] action → raw parameter values (clipped to bounds)."""
+        raw = self._lows + np.clip(norm_action, 0.0, 1.0) * self._range
+        return raw.tolist()
+
+    # ── Gymnasium interface ──────────────────────────────────────────────────
+
+    def reset(
+        self,
+        *,
+        seed: Optional[int] = None,
+        options: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[np.ndarray, Dict]:
+        super().reset(seed=seed)
+        self._step_count = 0
+
+        if options is not None and 'frame_params' in options:
+            # Caller supplied a specific design
+            raw = options['frame_params']
+            if isinstance(raw, dict):
+                genome = [raw[k] for k in PARAM_NAMES]
+            else:
+                genome = list(raw)
+        else:
+            # Random legal-ish starting point
+            genome = self._random_genome()
+
+        self._current_params = genome_to_dict(genome)
+        self._current_cda    = self._evaluate(self._current_params)
+        obs = self.normalise(genome)
+        info = self._make_info(self._current_params, self._current_cda)
+        return obs, info
+
+    def step(
+        self, action: np.ndarray
+    ) -> Tuple[np.ndarray, float, bool, bool, Dict]:
+        """
+        Evaluate a proposed frame design.
+
+        Args:
+            action: normalised [0,1] frame parameter vector (N_PARAMS,)
+
+        Returns:
+            (observation, reward, terminated, truncated, info)
+        """
+        self._step_count += 1
+        genome = self.denormalise(action)
+        params = genome_to_dict(genome)
+
+        cda        = calculate_cda(params)
+        cr         = check_uci_compliance(params)
+        total_mass = params['frame_weight'] + RIDER_MASS
+        power      = martin_power(cda, total_mass, EVAL_SPEED_MS)
+        pen_power  = power + cr.penalty
+        reward     = -pen_power       # maximise reward ↔ minimise power
+
+        self._current_params = params
+        self._current_cda    = cda
+
+        obs        = self.normalise(genome)
+        terminated = True             # single-step episode
+        truncated  = False
+        info       = self._make_info(params, cda, pen_power)
+        return obs, reward, terminated, truncated, info
+
+    def render(self) -> None:
+        if self.render_mode == "human" and self._current_params is not None:
+            p = self._current_params
+            wb = compute_wheelbase(p)
+            print(
+                f"  CdA={self._current_cda:.4f} m²  |  "
+                f"stack={p['stack']:.0f} mm  reach={p['reach']:.0f} mm  "
+                f"wb={wb:.0f} mm  weight={p['frame_weight']:.2f} kg"
+            )
+
+    # ── Helpers ──────────────────────────────────────────────────────────────
+
+    def _random_genome(self) -> list:
+        """Generate a uniformly random genome within declared bounds."""
+        return [
+            float(self.np_random.uniform(lo, hi))
+            for lo, hi in PARAM_BOUNDS
+        ]
+
+    @staticmethod
+    def _evaluate(params: Dict[str, float]) -> float:
+        """Return raw CdA for a parameter dict."""
+        return calculate_cda(params)
+
+    @staticmethod
+    def _make_info(
+        params: Dict[str, float],
+        raw_cda: float,
+        penalised_power_val: Optional[float] = None,
+    ) -> Dict:
+        cr = check_uci_compliance(params)
+        wb = compute_wheelbase(params)
+        total_mass = params['frame_weight'] + RIDER_MASS
+        power_w = martin_power(raw_cda, total_mass, EVAL_SPEED_MS)
+        if penalised_power_val is None:
+            penalised_power_val = power_w + cr.penalty
+        return {
+            'cda':              raw_cda,
+            'penalised_power':  penalised_power_val,
+            'is_legal':         cr.is_legal,
+            'violations':       cr.violations,
+            'wheelbase_mm':     wb,
+            'power_at_45kmh':   power_w,
+            'trunk_angle_deg':  _trunk_angle_from_params(params),
+            'params':           dict(params),
+        }
+
+
+# ── Stand-alone evaluation helper (used by GA fitness function) ───────────────
+
+def evaluate_frame(genome: list) -> Tuple[float]:
+    """
+    DEAP-compatible fitness function.
+
+    Returns a 1-tuple (penalised_power_W,) — DEAP expects tuple fitness values.
+    Lower is better (minimisation problem).
+    """
+    params     = genome_to_dict(genome)
+    raw_cda    = calculate_cda(params)
+    cr         = check_uci_compliance(params)
+    total_mass = params['frame_weight'] + RIDER_MASS
+    power      = martin_power(raw_cda, total_mass, EVAL_SPEED_MS)
+    return (power + cr.penalty,)
+
+
+def _trunk_angle_from_params(params: Dict[str, float]) -> float:
+    from physics import _trunk_angle_degrees
+    return _trunk_angle_degrees(params['stack'], params['reach'])
