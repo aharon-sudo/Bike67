@@ -4,7 +4,7 @@ Evolutionary AI that evolves UCI-legal bicycle frames from scratch using only th
 From Bikes to the World: A Framework for Rulebook-Constrained Evolutionary AI
 
 
-Abstract
+Abstract:
 This paper proposes a framework for applying evolutionary algorithms to constrained physical design problems, using competitive sport regulations as the sole boundary condition. The central argument is that human engineering, however sophisticated, is bounded not just by rules but by accumulated assumption. An AI system given only a regulatory document and a fitness function, with no inherited design knowledge, may find solutions that generations of human engineers have systematically missed. This paper documents both the theoretical framework and its first experimental results, produced in a single afternoon on a personal laptop at zero cost. The experiment used professional cycling's UCI regulations as the constraint set and produced a repeatable, statistically consistent finding: asymmetric wheel sizing is independently evolved by the algorithm across every run, converging on a smaller front wheel and larger rear wheel configuration that no current UCI road racing team deploys. The paper then outlines the scaling roadmap from cycling through Formula One, aerospace, and ultimately toward comprehensive systems simulation including human biological modeling.
 
 1. The Question Behind Formula One
