@@ -1,0 +1,14 @@
+# Bicycle Frame Geometry Optimiser — Python dependencies
+# Install with:  pip install -r requirements.txt
+
+# Gymnasium (OpenAI) — simulation environment wrapper
+gymnasium>=0.29.0
+
+# DEAP — Distributed Evolutionary Algorithms in Python
+deap>=1.4.1
+
+# Numerical computing
+numpy>=1.24.0
+
+# Plotting
+matplotlib>=3.7.0

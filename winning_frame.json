@@ -1,0 +1,62 @@
+{
+  "meta": {
+    "description": "Evolved UCI-legal bicycle frame \u2014 minimum power @ 45 km/h (extreme exploration mode)",
+    "model": "Martin et al. (1998) Road Cycling Power",
+    "generation": 1500,
+    "uci_legal": true,
+    "violations": []
+  },
+  "performance": {
+    "CdA_m2": 0.256145,
+    "power_at_45kmh_W": 342.2,
+    "trunk_angle_deg": 20.0,
+    "wheelbase_mm": 950.02,
+    "stack_reach_ratio": 1.2895,
+    "wheel_asymmetry_mm": 150.0,
+    "handlebar_reach_mm": 61.5,
+    "handlebar_drop_mm": 126.9,
+    "handlebar_width_mm": 350.0
+  },
+  "frame_parameters": {
+    "head_tube_angle": 75.9414,
+    "seat_tube_angle": 58.0,
+    "top_tube_length": 650.1285,
+    "head_tube_length": 165.135,
+    "chainstay_length": 383.0306,
+    "bb_drop": 120.0,
+    "fork_offset": 4.6469,
+    "stack": 557.6903,
+    "reach": 432.4872,
+    "down_tube_aspect": 2.6652,
+    "seat_tube_aspect": 2.6666,
+    "top_tube_aspect": 2.6664,
+    "chainstay_aspect": 2.6648,
+    "frame_weight": 6.8,
+    "front_wheel_diameter": 550.0,
+    "rear_wheel_diameter": 700.0,
+    "handlebar_reach": 61.4852,
+    "handlebar_drop": 126.8882,
+    "handlebar_width": 350.0
+  },
+  "parameter_units": {
+    "head_tube_angle": "deg",
+    "seat_tube_angle": "deg",
+    "top_tube_length": "mm",
+    "head_tube_length": "mm",
+    "chainstay_length": "mm",
+    "bb_drop": "mm",
+    "fork_offset": "mm",
+    "stack": "mm",
+    "reach": "mm",
+    "down_tube_aspect": "ratio",
+    "seat_tube_aspect": "ratio",
+    "top_tube_aspect": "ratio",
+    "chainstay_aspect": "ratio",
+    "frame_weight": "kg",
+    "front_wheel_diameter": "mm",
+    "rear_wheel_diameter": "mm",
+    "handlebar_reach": "mm",
+    "handlebar_drop": "mm",
+    "handlebar_width": "mm"
+  }
+}
